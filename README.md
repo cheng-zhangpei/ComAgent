@@ -1,3 +1,4 @@
+# ComAgent
 # Intelligent Agent Framework for Complex Task Management
 
 ## Overview
@@ -72,4 +73,3 @@ This project aims to develop an intelligent agent framework capable of managing 
   - `etcd` (for Etcd interaction)
   - `threading` (for multi-threaded operations)
 
-### Installation
