@@ -2,17 +2,14 @@ import threading
 
 
 class BaseAgent:
-    def __init__(self, agent_id, rabbitmq_connection, queue_name=None, etcdConnection=None, tool_server_ip="localhost",
-                 tool_server_port="8888"):
+    def __init__(self, agent_id, rabbitmq_connection, queue_name=None):
 
         self.agent_id = agent_id
-        self.state = "initialized"  # label the status of the agent\
-        self.current_context = ""  # it will record the current context
-        self.cache_manager = CacheManager(etcdConnection, self.agent_id, self.current_context)
+        self.state = 1
+        self.current_context = ""
         # ----------------------------------------------communication  ---------------------------------------------
         self.communication_manager = CommunicationManager(rabbitmq_connection, agent_id, queue_name)
-        # ----------------------------------------------tool server ---------------------------------------------
-        self.tool_server = ToolServer(tool_server_ip, tool_server_port)
+
 
     def run_agent(self, human_interp=False):
         """boot the agent"""
@@ -30,25 +27,12 @@ class BaseAgent:
         pass
 
 
-class ToolServer:
-    def __init__(self, ip, port):
-        self.ip = ip
-        self.port = port
-        self.tool_config_list = {}
-
-    def get_config_list(self):
-        """get the info of the tool server"""
-
-        # send the request
-        pass
 
 
 class CacheManager:
-    def __init__(self, etcdConnection, agent_id, context):
+    def __init__(self, etcdConnection, context):
         self.context = context
         self.etcdConnection = etcdConnection  # client = etcd.Client(host='localhost', port=2379)
-        self.global_cache_path = "/agents/global"  # global cache path
-        self.local_cache_path = f"/agents/{agent_id}/"  # local cache path
         self.echo = 0  # record the echo of the dialogue
         self.cache_key = 0  # record the cache key of the etcd
         self.memory_space = 0
@@ -71,13 +55,11 @@ class CommunicationManager:
 
     def start_listening(self):
         """启动消息接收并处理"""
-
         def callback(ch, method, properties, body):
             message = body.decode()
             self.message_handler(message)
 
         threading.Thread(target=self.rabbitmq_connection.receive_message, args=(self.queue_name, callback)).start()
-
     def message_handler(self, message):
         """消息处理逻辑，具体的逻辑由子类实现"""
         print(f"Agent {self.agent_id} received message: {message}")
