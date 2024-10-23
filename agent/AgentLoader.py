@@ -3,75 +3,75 @@
 @function      :AgentLoader：load agent into the session
 @time          :2024/9/26 20:56
 """
-from agent.AgentTemplate import BaseAgent
+import logging
+import time
 
-# 这个类后面可以尝试修改成模型池，可以提供弹性化的模型优化管理策略
-class ModelLoader:
-    def __init__(self, model_name):
-        self.model_name = model_name
-        self.model = self.load_model()
-    def load_model(self):
-        # 将model load 到 memory/ gpu中
-        return AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            torch_dtype="auto",
-            device_map="auto"
-    )
+import requests
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from agent.prompt_template import expert_agent_prompt
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 
 class AgentLoader:
-    """该类用于装载专家模型或者是子智能体"""
-    def __init__(self,model_name,characteristic = "expert"):
-        self.characteristic = characteristic
-        self.model_name  = model_name
-        self.model = self.load_model()
+    """
+    message format:
 
-    def load_model(self):
-        # 将model load 到 memory/ gpu中
-        return AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            torch_dtype="auto",
-            device_map="auto"
-        )
+    """
+    def __init__(self,ip, port, message = "", load_method = "int4",job="expert"):
+        self.ip = ip
+        self.port  = port
+        self.job = job # use to  identify
+        self.load_method = load_method # loading method
+        self.message = message
 
-    def expert_load(self):
-        # 这个的函数是在Session中率先创建的
-        pass
-    def sub_class_load(self):
-        # 这个函数是在decomposer中工具expert的输出进行sub-class的创建
-        pass
+    def load_model(self,model_path):
 
-
-
+        # build the request about loading model into the memory
+        url = f"http://{self.ip}:{self.port}/load_model_local"
+        payload = {"model_path": model_path}
+        try:
+            response = requests.post(url, json=payload)
+            return response.json()
+        except  Exception as e:
+            logger.error(f"预测请求失败: {e}")
 
 
+    def send_message(self,message):
+        # send the message about the operation,the message here will be compounded with the context in agent runtime
+        url = f"http://{self.ip}:{self.port}/generate"
+        payload = {"message": message,"max_value": 1024}
+        try:
+            response = requests.post(url, json=payload)
+            return response.json()
+        except  Exception as e:
+            logger.error(f"预测请求失败: {e}")
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
-model_name = "Qwen/Qwen2.5-72B-Instruct"
-
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    torch_dtype="auto",
-    device_map="auto"
-)
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-prompt = "Give me a short introduction to large language model."
-messages = [
-    {"role": "system", "content": "You are Qwen, created by Alibaba Cloud. You are a helpful assistant."},
-    {"role": "user", "content": prompt}
-]
-text = tokenizer.apply_chat_template(
-    messages,
-    tokenize=False,
-    add_generation_prompt=True
-)
-model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
-generated_ids = model.generate(
-    **model_inputs,
-    max_new_tokens=512
-)
-generated_ids = [
-    output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
-]
-response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+#
+# model_name = r"D:\czp\k8s-mult-agent\resource\models\chengzipi\huggingface\Qwen-72B-2.5"
+# tokenizer = AutoTokenizer.from_pretrained(model_name)
+# model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto",  quantization_config=bnb_config).eval()
+# message = ("我想要让你解决k8s的运维问题，你可以获取etcd中的集群信息，并根据用户的需求解决问题，你对k8s的了解如何，"
+#            "如果我让你可以调用k8s的api并且可以自动的创建子智能体，你是否有信心解决复杂的运维问题？,比如我现在想要在k8s中部署一个3个节点的mysql你给我详细的步骤看看")
+# mess = expert_agent_prompt(message,"ignore","ignore")
+# inputs = tokenizer(mess, return_tensors='pt')
+# inputs = inputs.to(model.device)
+# generated_ids = model.generate(
+#     **inputs,
+#     max_new_tokens=1024,  # 限制生成的新 token 长度
+#     do_sample=True,  # 是否启用采样，提升生成的多样性
+#     temperature=0.7,  # 控制输出的随机性
+#     top_p=0.9,  # nucleus sampling
+#     use_cache=True,  # 启用缓存以加速生成
+# )
+#
+# # 实时解码输出
+# for i, token_id in enumerate(generated_ids[0]):
+#     token = tokenizer.decode(token_id, skip_special_tokens=True)
+#     print(token, end="", flush=True)  # 实时输出
+# print("装入模型...")
+# pred = model.generate(**inputs,max_length=5000)
+#
+# print(tokenizer.decode(pred.cpu()[0], skip_special_tokens=True))

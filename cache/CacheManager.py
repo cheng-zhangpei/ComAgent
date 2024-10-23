@@ -38,7 +38,7 @@ class CacheManager:
             "value":{value}
         '''
         self.etcd_connection.write(key,cache_message)
-    def write_cache(self,key,value):
+    def write(self,key,value):
         self.etcd_connection.write(key,value)
     def get_global_cache(self):
         """get global cache
