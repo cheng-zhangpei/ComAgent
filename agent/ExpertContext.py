@@ -18,3 +18,6 @@ class ExpertContext:
         # create memory space
         response = self.base.agent_loader.send_message(initial_prompt)
         self.base.cache_manager.write( self.base.agent_cache_key+f"/{self.echo}", response)
+    def input_info(self,input_info):
+        # todo 模型输入信息，并读取之前的输出，这一点其实是固定的，如果正常创建，记忆空间中一定会有该模型，否则其实可以丢一个警告
+        pass

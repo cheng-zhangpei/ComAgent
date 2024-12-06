@@ -1,4 +1,3 @@
-import threading
 
 
 class BaseAgent:
@@ -29,25 +28,3 @@ class BaseAgent:
 
 
 
-
-class CommunicationManager:
-    def __init__(self, rabbitmq_connection, queue_name, agent_id):
-        self.pre_semaphore = []  # pre task semaphore list
-        self.post_semaphore = []  # post task resources produce
-        self.agent_id = agent_id
-        self.rabbitmq_connection = rabbitmq_connection
-        self.queue_name = queue_name or f'{agent_id}_queue'
-        self.rabbitmq_connection.declare_queue(self.queue_name)
-
-    def send_message(self, to_agent, message):
-        print(f"Agent {self.agent_id} sending message to {to_agent.agent_id}")
-        self.rabbitmq_connection.send_message(to_agent.queue_name, message)
-
-    def start_listening(self):
-        def callback(ch, method, properties, body):
-            message = body.decode()
-            self.message_handler(message)
-
-        threading.Thread(target=self.rabbitmq_connection.receive_message, args=(self.queue_name, callback)).start()
-    def message_handler(self, message):
-        print(f"Agent {self.agent_id} received message: {message}")

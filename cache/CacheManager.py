@@ -3,9 +3,14 @@
 @function      :for managing the cache
 @time          :2024/10/11 14:43
 """
+import logging
+import os
+import socket
 from datetime import datetime
 
 import etcd
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 
 class CacheManager:
@@ -22,6 +27,17 @@ class CacheManager:
         self.global_cache_path = "/agents/global"  # global cache path
         self.local_cache_path = f"/agents/"  # local cache path
 
+    def test_conn(self):
+        try:
+            with socket.create_connection((self.etcd_ip, self.etcd_port), timeout=5) as sock:
+                logger.info(f"CacheManager Connection to {self.etcd_ip}:{self.etcd_port} is successful.")
+                return True
+        except socket.timeout:
+            logger.info(f"CacheManager Connection to {self.etcd_ip}:{self.etcd_port} timed out.")
+            return False
+        except socket.error as e:
+            logger.info(f"CacheManager Connection to {self.etcd_ip}:{self.etcd_port} failed: {e}")
+            return False
     def write_agent_cache(self, value, agent_id):
         """
         we should set the format of the cache
@@ -38,6 +54,7 @@ class CacheManager:
             "value":{value}
         '''
         self.etcd_connection.write(key,cache_message)
+
     def write(self,key,value):
         self.etcd_connection.write(key,value)
     def get_global_cache(self):

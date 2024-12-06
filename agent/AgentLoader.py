@@ -4,6 +4,8 @@
 @time          :2024/9/26 20:56
 """
 import logging
+import os
+import socket
 import time
 
 import requests
@@ -26,6 +28,18 @@ class AgentLoader:
         self.job = job # use to  identify
         self.load_method = load_method # loading method
         self.message = message
+
+    def test_conn(self):
+        try:
+            with socket.create_connection((self.ip, self.port), timeout=5) as sock:
+                print(f"AgentLoader Connection to {self.ip}:{self.port} is successful.")
+                return True
+        except socket.timeout:
+            print(f"AgentLoader Connection to {self.ip}:{self.port} timed out.")
+            return False
+        except socket.error as e:
+            print(f"AgentLoader Connection to {self.ip}:{self.port} failed: {e}")
+            return False
 
     def load_model(self,model_path):
 

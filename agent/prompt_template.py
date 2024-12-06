@@ -21,7 +21,7 @@ def expert_agent_prompt(task, local_cache, global_cache):
 {local_cache}
 全局任务缓存:
 {global_cache}
-将你的协调信息按照下面的格式返回：
+将你的协调信息按照下面的格式返回(只需要返回json部分的信息不能返回其他任何信息)：
 {{
     "sub_tasks": [
         {{
@@ -50,7 +50,7 @@ def expert_agent_prompt(task, local_cache, global_cache):
 
 def sub_task_agent_prompt(sub_task_description, link_cache, direct_agent_return, sub_task_id, tool_describe,return_info):
     prompt = f'''
-你是一个子任务智能体服务于专家智能体的需求
+你是一个子任务智能体服务于专家智能体的需求,你只需要输出下面输出格式中的内容
 你的任务是:
 "{sub_task_description}"
 可用工具列表及其描述与参数信息:
@@ -71,3 +71,7 @@ def sub_task_agent_prompt(sub_task_description, link_cache, direct_agent_return,
 
     '''
     return prompt
+
+def clean_model_output(model_output):
+    # clean nad extract
+    pass
