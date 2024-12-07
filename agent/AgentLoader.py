@@ -32,13 +32,13 @@ class AgentLoader:
     def test_conn(self):
         try:
             with socket.create_connection((self.ip, self.port), timeout=5) as sock:
-                print(f"AgentLoader Connection to {self.ip}:{self.port} is successful.")
+                logger.info(f"AgentLoader Connection to {self.ip}:{self.port} is successful.")
                 return True
         except socket.timeout:
-            print(f"AgentLoader Connection to {self.ip}:{self.port} timed out.")
+            logger.info(f"AgentLoader Connection to {self.ip}:{self.port} timed out.")
             return False
         except socket.error as e:
-            print(f"AgentLoader Connection to {self.ip}:{self.port} failed: {e}")
+            logger.info(f"AgentLoader Connection to {self.ip}:{self.port} failed: {e}")
             return False
 
     def load_model(self,model_path):
@@ -47,7 +47,9 @@ class AgentLoader:
         url = f"http://{self.ip}:{self.port}/load_model_local"
         payload = {"model_path": model_path}
         try:
+            logger.info("the model is loading in the server")
             response = requests.post(url, json=payload)
+            logger.info("the model is loaded in the server")
             return response.json()
         except  Exception as e:
             logger.error(f"预测请求失败: {e}")
@@ -58,6 +60,7 @@ class AgentLoader:
         url = f"http://{self.ip}:{self.port}/generate"
         payload = {"message": message,"max_value": 1024}
         try:
+            logger.info("the model is working")
             response = requests.post(url, json=payload)
             return response.json()
         except  Exception as e:

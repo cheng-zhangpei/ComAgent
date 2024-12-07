@@ -7,10 +7,11 @@ import pika
 
 
 class RabbitMQConnection:
-    def __init__(self, host='localhost', exchange='agent_exchange'):
+    def __init__(self, host='localhost',port=5555, exchange='agent_exchange'):
         self.host = host
+        self.port = port
         self.exchange = exchange
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host))
+        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host,port=self.port))
         self.channel = self.connection.channel()
         self.channel.exchange_declare(exchange=self.exchange, exchange_type='direct')
 
