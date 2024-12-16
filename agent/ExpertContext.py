@@ -5,14 +5,15 @@
 """
 import json
 import logging
+import re
 
-from agent.AgentTemplate import BaseAgent
-from agent.prompt_template import expert_agent_prompt, clean_and_parse
+from agent.prompt_template import initial_prompt_expert, json_encode, expert_task_prompt
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 class ExpertContext:
-    def __init__(self, agent_id, cache_manager, communication_manager,agent_loader):
+    def __init__(self, agent_id, cache_manager,agent_loader):
         # 继承agent类模板
         self.echo = 0 # record current epoch of the speech
         self.agent_id = agent_id
@@ -21,41 +22,28 @@ class ExpertContext:
         self.global_cache = "/global_cache"
         self.cache_manager = cache_manager
         self.agent_loader = agent_loader
-        self.communication_manager = communication_manager
-        self.memory_space = 3
+        self.memory_space = 5
         self.retry = 2
+        self.input_memory = f"/agents/{self.agent_id}/input/"
+        self.output_memory = f"/agents/{self.agent_id}/output/"
+        self.job_memory = f"/agents/{self.agent_id}/jobs/"
 
 
     def initial_chat(self,init_task_description):
         # format the input
         retry_count = self.retry
-        initial_prompt = expert_agent_prompt(init_task_description,"it is initial chat!",self.global_cache)
+        initial_input= initial_prompt_expert(init_task_description)
         # create memory space
-        response = self.agent_loader.send_message(initial_prompt)
-        self.local_cache_key= self.local_cache_prefix + f"/{self.echo}"
+        response = self.agent_loader.send_message(initial_input, 200)
+        response_str = self.postprocess_output(str(response))
         self.echo += 1
-        cleaned_response = clean_and_parse(response['result'])
-        serialized_data = ""
-        if cleaned_response == 'error':
-            logger.info("parse error! start retry again")
-            # parse error retry
-            while retry_count :
-                response = self.agent_loader.send_message(initial_prompt)
-                cleaned_response = clean_and_parse(response['result'])
-                # here we just save the memory part
-                if cleaned_response != 'error':
-                    serialized_data = json.dumps(cleaned_response, ensure_ascii=False)
-                    break
-                retry_count -= 1
-        else:
-            serialized_data = json.dumps(cleaned_response, ensure_ascii=False)
-        # cleaned_response = json.loads(serialized_data) # str -> json
-        print("write key")
-        print(self.local_cache_key)
-        # in convert process you need to transform the formation
-        self.cache_manager.write_agent_cache(json.dumps(json.loads(serialized_data)['memory'], ensure_ascii=False)
-                                             , self.agent_id) # the info writed here is not right
-        return cleaned_response
+        self.cache_manager.write_task(self.input_memory + f"{self.echo}",init_task_description, self.agent_id) # the info writed here is not right
+        self.cache_manager.write_task(self.output_memory + f"{self.echo}",response_str, self.agent_id) # the info writed here is not right
+        logger.info(f"memory space created(the info is key):\n"
+                    f"input memory:{self.input_memory}\n"
+                    f"output memory:{self.output_memory}\n"
+                    f"job memory： {self.job_memory}\n")
+        return response_str
 
 
     def task_input_info(self,input_info):
@@ -67,33 +55,42 @@ class ExpertContext:
         hist = None
         while epoch > 0:
             if memory > 0:
-                current_key_ = self.local_cache_prefix + f"/{epoch}"
-                print("current key")
-                print(current_key_)
-                hist = self.cache_manager.get(current_key_)
-                cleaned_response = json.loads(hist)  # str -> json
-                print(cleaned_response)
+                # todo :search functions
+                current_key_1 = self.output_memory + f"{epoch}"
+                current_key_2 = self.input_memory + f"{epoch}"
+                logger.info(f"current key1 {current_key_1}")
+                logger.info(f"current key2 {current_key_2}")
+                hist_out = self.cache_manager.get_memory(current_key_1)
+                hist_in = self.cache_manager.get_memory(current_key_2)
+                hist = "任务memory：" + hist_in + "输出memory：" + hist_out
+                logger.info(f"memory hist {epoch}: " + hist)
             epoch -= 1
             memory -= 1
         # combine the info
+        cleaned_response = None
         if hist is not None:
-            # combine todo: more formation of tasks and you should construct more prompt formats
-
-            pass
-        prompt_ = expert_agent_prompt(input_info,str(hist),self.global_cache)
-        # get the response from  the model
-        response = self.agent_loader.send_message(prompt_)
-        cleaned_response = clean_and_parse( response['result'])
-        print(cleaned_response)
-        # write into it`s memory space
-
-        # return the response
+            prompt_ = expert_task_prompt(input_info, str(hist),"None")
+            # get the response from  the model
+            response = self.agent_loader.send_message(prompt_,700)
+            cleaned_response = json_encode(response)
+        else:
+            logger.error("the agent did not initialized!")
+        return cleaned_response
 
 
 
-        pass
     def job_schedule_input_info(self,task_status):
         # the output of initial
         pass
 
+    def postprocess_output(self,text):
+        """
+        后处理生成文本，去除冗余信息
+        """
+        # 去除多余的空格和换行
+        text = re.sub(r"\s+", " ", text).strip()
+        # 去除重复的句子
+        sentences = text.split("。")
+        unique_sentences = list(dict.fromkeys(sentences))  # 去重
+        return "。".join(unique_sentences)
 
