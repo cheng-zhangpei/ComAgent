@@ -5,7 +5,8 @@
 """
 from etcd3 import client
 
-from cache.CacheManager import CacheManager
+from cache.cache_manager import CacheManager
+# 用于清除显卡显存
+import torch
 
-etcd_connection = client(host="127.0.0.1", port=2379)
-print(etcd_connection.get_all_response())
+torch.cuda.empty_cache()

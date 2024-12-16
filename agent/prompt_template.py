@@ -7,8 +7,7 @@ import json
 import re
 
 
-def expert_agent_prompt(task, local_cache, global_cache):
-    # 注：此处expert并不能获得工具池中的工具，现在的想法暂时是
+def initial_prompt_expert(task):
     """
 
     :param task:任务描述
@@ -18,66 +17,200 @@ def expert_agent_prompt(task, local_cache, global_cache):
     """
     prompt = f'''
 你是一个专家智能体，你需要将一个复杂任务分解为多个子任务
-你的任务是 "{task}"
-历史信息:
-{local_cache}
-全局任务缓存:
-{global_cache}
-将你的协调信息按照下面的格式返回并对相应内容进行替换(只需要返回json部分的信息不能返回其他任何信息,并且只返回一次并在开头与结尾加上标记)：
-<start_json>: json开始
-<end_json>: json结束
-下面是输出的模板，只需要输出下面json部分，上面是两个标记
-{{
-    "sub_tasks": [
-        {{
-            "id": 1,
-            "description": "子任务描述",
-            "return"："任务返回内容"
-        }},
-        {{
-            "id": 2,
-            "description": "子任务描述",
-            "return"："任务返回内容"
-                ...
-        }}
-        ...(根据任务弹性布置)
-    ],
-    # 下面这个是依赖图，也就是任务之间的同步关系。key为sub_tasks编号，后面的列表是任务的前置的条件
-    "dependency_graph": {{
-        "1": [],
-        "2": [1]
-        ...根据任务弹性布置
-    }}
-    "memory": {{
-        此处添加记忆内容，内容为本次任务的核心流程等，尽可能简约
-    }}
-}}
-不要包含输入内容的任何重复部分，只输出你的内容就好了，我输入的prompt不能附带在输出中，以上内容不能出现在输出中
+这条信息是一个起始信息,用户会传入一个需要你完成任务的大致描述,你需要根据用户描述进行相应的欢迎
+这条信息返回之后,服务器会为你建议记忆空间后续数据的发送就会包括
+你的任务是 "{task}",
     '''
     return prompt
 
-def sub_task_agent_prompt(sub_task_description, link_cache, direct_agent_return, sub_task_id, tool_describe,return_info):
+def expert_task_prompt(memory,task_description,config):
+    prompt = f'''
+    下面是我给你当前任务执行信息
+    任务描述:{task_description}
+    记忆信息{memory}  # 由任务所决定的所需记忆内容在后台查找后会添加到这个位置
+    配置:{config} # 一些必要的配置信息以复制决策
+    # todo: 添加任务服务器的任务配置，给与任务服务器中所提供的大致工具信息辅助决策
+    下面是你的回答，请使用json格式进行回答，并使用<start_json>与<end_json>将生成的内容包裹方便解析
+    如(一定要严格按照下面的格式否则会出错)：
+    <start_json>
+    {{
+        sub_tasks:[
+            {{
+                id:1,
+                description:"子任务描述"
+                return: "任务返回内容"
+            }},
+            {{
+                id:2,
+                description:"子任务描述"
+                return: "任务返回内容"
+            }},
+            ...  
+        ],
+        "dependencies":{{
+            "1":[],
+            "2":["1"],
+        ...
+        }},
+        memory:{{
+            此处添加简易的记忆内容如当前任务信息等内容
+        }}
+    }}
+    <end_json>
+        '''
+    return prompt
+
+def expert_task_schedule(status,memory,config,fail_info = ""):
+    prompt = f'''
+    下面是我给你当前任务执行信息
+    任务执行状态：{status} #"1":任务成功 "0":任务失败
+    失败智能体状态：{fail_info} # 会详细记录任务智能体的失败状态 
+    记忆信息{memory}  # 由任务所决定的所需记忆内容在后台查找后会添加到这个位置
+    配置:{config} # 一些必要的配置信息以复制决策
+    # todo: 添加任务服务器的任务配置，给与任务服务器中所提供的大致工具信息辅助决策
+    下面是你的回答，请使用json格式进行回答，并使用<start_json>与<end_json>将生成的内容包裹方便解析
+    子任务划分的标准是该任务是否可以通过一个配置文件或者是一个api调用可以解决。
+    如在k8s中一些较为复杂的操作直接可以在一个yaml文件中完成不需要划分为多个任务，子智能体只需要生成文件并部署即可
+    如：
+    <start_json>
+    {{
+         status:1/0, # 请回答0或者1，如果是1，后面的字段全部无效。只有为0才需要生成后面的字段
+         restart:1/0, # 如果是1就会重新读取任务的描述重新生成任务链路，该任务链路需要避免之前任务执行的错误，如果是0
+         modified_tasks:{{ # 该字段是读取异常之后重新调整的任务
+             sub_tasks:[
+                {{
+                    id:1,
+                    description:"子任务描述"
+                    return: "任务返回内容"
+                }},
+                {{
+                    id:2,
+                    description:"子任务描述"
+                    return: "任务返回内容"
+                }},
+                ...  
+            ],
+            "dependencies":{{ # 任务之间的依赖关系
+                "1":[],
+                "2":["1"],
+            ...
+            }},
+            memory:{{
+                此处添加简易的记忆内容如当前任务信息等内容
+            }}
+        }}
+                
+     }}
+    <end_json>
+'''
+    return prompt
+
+
+def expert_memory_search(tasks_description,info):
+    prompt = f'''
+    你自己选择该任务需要读取哪些部分记忆信息
+    任务内容:{tasks_description}
+    附加信息:{info}
+    下面是你的回答，需要你按照下面的格式进行决策，请使用json格式进行回答，并使用<start_json>与<end_json>将生成的内容包裹方便解析
+    如：
+    <start_json>
+    {{
+        "task_key_word":["关键字1"，"关键字2",.....], # 用于搜索任务描述历史记忆空间
+        "output_key_word":["关键字1"，"关键字2",.....], # 用于搜索决策历史历史空间
+        "jobs_key_word":["关键字1"，"关键字2",.....], # 用于搜索任务执行情况历史空间
+        ... #后续会添加更多的搜索方式，看数据库层所提供的搜索接口，暂时设置为需要同时对三个空间进行搜索
+    }}
+'''
+    return prompt
+
+
+def sub_task_agent_server_prompt(tool_server_info,sub_task_description,return_content):
+    # sub-task agent获取Tool server信息
     prompt = f'''
 你是一个子任务智能体服务于专家智能体的需求,你只需要输出下面输出格式中的内容
+下面是不同服务器所提供的工具类型的数据：
+"{tool_server_info}"
 你的任务是:
 "{sub_task_description}"
-可用工具列表及其描述与参数信息:
-"{tool_describe}"
-你需要返回的信息是：
-”{return_info}“
-链路缓存（子任务可获得依赖路径上其他智能体的信息）
-”{link_cache}“
-直接相连智能体：
-”{direct_agent_return}“
-输出格式为：
+你最终返回给下一个智能体的数据是：
+”{return_content}“
+下面给出你的初步决策，每一步的决策尽可能简单,仅可以使用单一Tool完成
+决策输出格式为(注意其余的信息都不要进行生成)：
+<start_json>
 {{
-    "task_id": "{sub_task_id}", # 当前的智能体或者是任务id
-    "status": "1/0", # 1代表任务完成，0代表任务异常
-    "output": "任务的运行结果",
-    ”analysis“: "任务的运行情况与对全局的分析"
+ 	"jobs":[
+ 	"0":{{
+ 		"func_describe":"此处描述需要用的工具",
+ 		"server_id": "根据server信息给出工具会属于的server",
+	}},
+	"1":{{
+ 		"func_describe":"此处描述需要用的工具",
+ 		"server_id": "根据server信息给出工具会属于的server",
+	}}, # ....根据自己需要添加 
+    ]
 }}
+<end_json>
+ '''
+    return prompt
 
-    '''
+def sub_task_agent_tools_prompt(server_id,tools_info,job_description):
+    # sub-task agent获取服务器上的Tool信息
+    prompt = f'''
+    你是一个子任务智能体服务于专家智能体的需求,你只需要输出下面输出格式中的内容
+    下面是{server_id}服务器所提供的工具详细数据的数据：
+    "{tools_info}"
+    你的任务是:
+    "{job_description}"
+    下面给出你的初步决策，每一步的决策尽可能简单,仅可以使用单一Tool完成
+    决策输出格式为(注意其余的信息都不要进行生成,xxx是你需要填充的内容，你只允许调用一个工具)：
+    <start_json>
+    {{
+     	tool_id:"xxx"
+     	tool_name:"xxx"
+     	tool_parameter:[
+     	    parameter1: "xxx" 
+     	    parameter2: "xxx"
+     	    ... 
+     	]
+    }}
+    <end_json>
+    若Tool 无法满足需求则返回
+    <start_json>
+    {{
+     	error: "tool can not satisfy the requirement"
+    }}
+    <end_json>
+     '''
+    return prompt
+
+
+def sub_task_agent_response_prompt(execute_status,return_content):
+    # sub-task agent获取服务器上的Tool信息
+    prompt = f'''
+        你是一个子任务智能体服务于专家智能体的需求,你只需要输出下面输出格式中的内容
+        你需要对前面链路的工具调用情况进行汇总
+        你的需要汇总的数据有:
+        "{execute_status}"
+        你需要向下一个智能体传递的内容：
+        "{return_content}"
+        决策输出格式为(注意其余的信息都不要进行生成,xxx是你需要填充的内容)：
+        <start_json>
+        {{
+            "execute_status": "success/error(decided by the execution info)",
+            "return_content": {{
+                "content1": xxx,
+                "content2": xxx,
+                // 可以根据需要继续添加更多内容
+            }}
+        }}
+        <end_json>
+        若需要重新规划任务
+        <start_json>
+        {{
+         	error:"restart"
+        }}
+        <end_json>
+         '''
     return prompt
 
 
@@ -98,7 +231,7 @@ def llm_output_checkout(raw_data):
         return {"error": "Failed to extract JSON"}
 
 
-def clean_and_parse(raw_data):
+def json_encode(raw_data):
     # raw_data = raw_data[]
     matches = re.findall(r'<start_json>([\s\S]*?)<end_json>', raw_data)
     if len(matches) == 0:
@@ -112,7 +245,6 @@ def clean_and_parse(raw_data):
         except Exception as e:
             print(f"JSON parse error: {e}")
     return 'error'
-
 
 def extract_top_level(cleaned_data):
     """

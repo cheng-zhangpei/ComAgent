@@ -11,7 +11,7 @@ import time
 import requests
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from agent.prompt_template import expert_agent_prompt
+from agent.prompt_template import initial_prompt_expert
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -55,14 +55,15 @@ class AgentLoader:
             logger.error(f"预测请求失败: {e}")
 
 
-    def send_message(self,message):
+    def send_message(self,message,max_value=1024):
         # send the message about the operation,the message here will be compounded with the context in agent runtime
         url = f"http://{self.ip}:{self.port}/generate"
-        payload = {"message": message,"max_value": 1024}
+        payload = {"message": message,"max_value": max_value}
         try:
             logger.info("the model is working")
             response = requests.post(url, json=payload)
-            return response.json()
+            response = response.json()
+            return response['result']
         except  Exception as e:
             logger.error(f"预测请求失败: {e}")
 
@@ -72,7 +73,7 @@ class AgentLoader:
 # model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto",  quantization_config=bnb_config).eval()
 # message = ("我想要让你解决k8s的运维问题，你可以获取etcd中的集群信息，并根据用户的需求解决问题，你对k8s的了解如何，"
 #            "如果我让你可以调用k8s的api并且可以自动的创建子智能体，你是否有信心解决复杂的运维问题？,比如我现在想要在k8s中部署一个3个节点的mysql你给我详细的步骤看看")
-# mess = expert_agent_prompt(message,"ignore","ignore")
+# mess = initial_prompt_expert(message,"ignore","ignore")
 # inputs = tokenizer(mess, return_tensors='pt')
 # inputs = inputs.to(model.device)
 # generated_ids = model.generate(

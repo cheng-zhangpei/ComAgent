@@ -24,11 +24,9 @@ class CacheManager:
     def __init__(self, etcd_ip, etcd_port):
         self.etcd_ip = etcd_ip
         self.etcd_port = etcd_port
-        # single instance initialization
         self.etcd_connection = client(host=self.etcd_ip, port=self.etcd_port)
         self.global_cache_path = "/agents/global"  # global cache path
-        self.local_cache_path = "/agents/"  # local cache path
-
+        # 细化记忆空间
 
     def test_conn(self):
         try:
@@ -43,23 +41,26 @@ class CacheManager:
             return False
 
 
-    def write_agent_cache(self, value, agent_id):
+    def write_task(self, key, value, agent_id):
         """
         we should set the format of the cache
         :param agent_id:
         :param value:
         :return:
         """
-        key = self.local_cache_path + agent_id + "/" + str(datetime.now())
-
-
         cache_message = f'''
             "agent_id": {agent_id},
             "timestamp":"{datetime.now()}"
-            "value":{value}
+            "value":{str(value)}
         '''
         self.etcd_connection.put(key,cache_message)
 
+    def get_memory(self, key):
+        kv_value = self.etcd_connection.get(key)
+        if kv_value[0] is not None:  # 检查值是否存在
+            return kv_value[0].decode('utf-8')  # 将字节数组解码为字符串
+        else:
+            return None  # 如果值为空，返回 None
 
 
     def search_agent_cache(self):
@@ -74,10 +75,18 @@ class CacheManager:
 
 
         pass
+    def get_by_prefix(self,prefix):
+        # 使用 range 方法获取所有以 prefix 开头的键值对
+        range_response = self.etcd_connection.get_prefix(prefix)
 
+        # 解析结果并存储到字典中
+        result = {}
+        for kv in range_response:
+            key = kv[1].key.decode('utf-8')  # 解码键
+            value = kv[0].decode('utf-8')  # 解码值
+            result[key] = value
 
-
-
+        return result
 
     def delete_all_memory(self):
         key = self.local_cache_path
@@ -116,11 +125,7 @@ class CacheManager:
 
         kv_value = self.etcd_connection.get(self.local_cache_path  + str(agent_id) )
         return str(kv_value[0])[1:]
-class MyCacheManager:
-    """
 
-    """
-    pass
 
 if __name__ == "__main__":
     cacheManager = CacheManager("127.0.0.1",2379)

@@ -6,48 +6,38 @@
 @Time : 2024/10/23 19:44
 """
 import ast
+import json
 
-from agent.AgentLoader import AgentLoader
-from agent.prompt_template import expert_agent_prompt, extract_top_level
-from cache.CacheManager import CacheManager
-from communication.CommunicationManager import CommunicationManager
-from communication.RabbitmqConnection import RabbitMQConnection
+from agent.agent_loader import AgentLoader
+from agent.tool_pool import ToolPool
+from agent.prompt_template import initial_prompt_expert
+from cache.cache_manager import CacheManager
 from session.ExpertSession import ExpertSession
 
-import json
-import re
-
-
-model_name = r"D:\czp\k8s-mult-agent\resource\models\chengzipi\huggingface\Qwen-72B-2.5"
-loader_ip = "127.0.0.1"
-loader_port = "5000"
-etcd_ip = "127.0.0.1"
-etcd_port = 2379
-rabbit_ip = "127.0.0.1"
-rabbit_port = 5555
-
-
-
+# 让用户通过配置文件导入内容
+def read_json_file(file_path):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        data = json.load(file)
+    return data
 
 if __name__ == "__main__":
-    # benchmark()
-    message = ("我想要让你解决k8s的运维问题，你可以获取etcd中的集群信息，并根据用户的需求解决问题"
-               "如果我让你可以调用k8s的api并且可以自动的创建子智能体，我现在想要在k8s"
-               "中部署一个3个节点的mysql，主从节点由你自己搭配")
-    expert_description = expert_agent_prompt(message,"ignore","ignore")
+    message = ("我想要让你解决k8s的运维问题，你可以获取etcd中的集群信息，并根据用户/工程师的需求解决问题")
+    file_path = "./config/config.json"  # 假设 JSON 文件名为 config.json
+    config_data = read_json_file(file_path)
+    model_name = config_data["model_name"]
+    loader_ip = config_data["loader_ip"]
+    loader_port = config_data["loader_port"]
+    etcd_ip = config_data["etcd_ip"]
+    etcd_port = config_data["etcd_port"]
+    tool_pool_host = config_data["tool_pool_host"]
+    tool_pool_port = config_data["tool_pool_port"]
 
+    expert_description = initial_prompt_expert(message)
     agentLoader = AgentLoader(loader_ip,loader_port)
     # the loader here is the file path in server machine
-    agentLoader.load_model(model_name) # create model in the remote machine or just use the schedule power of the k8s cluster
+    # agentLoader.load_model(model_name) # create model in the remote machine or just use the schedule power of the k8s cluster
     # now the model should just run in the server
-    # initialize the cacheManager
     cache_manager = CacheManager(etcd_ip,etcd_port)
-    # the test will running on etcd ,orangeDB should be compatible with the demand here
-    # initialize the communication
-    # rabbitmq_conn = RabbitMQConnection()
-    # communication_manager = CommunicationManager(rabbitmq_conn)
-    session = ExpertSession(agentLoader,cache_manager,"",expert_description)
+    tool_pool = ToolPool(tool_pool_host,tool_pool_port)
+    session = ExpertSession(agentLoader,cache_manager,message,expert_description)
     session.session_boot()
-    # start the assignment  and the session will just stay in the memory and never stop
-    # the session will stop until we just give the exit command
-##  session.session_boot()

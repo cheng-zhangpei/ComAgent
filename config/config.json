@@ -1,0 +1,9 @@
+{
+    "model_name": "D:\\czp\\k8s-mult-agent\\resource\\models\\chengzipi\\huggingface\\Qwen-72B-2.5",
+    "loader_ip": "127.0.0.1",
+    "loader_port": "5000",
+    "etcd_ip": "127.0.0.1",
+    "etcd_port": 2379,
+    "tool_pool_host": "127.0.0.1",
+    "tool_pool_port": 5556
+}
