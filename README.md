@@ -32,7 +32,7 @@
 
 ### 整体架构
 
-![](image/expertsession.png)
+![](./image/expertSession.png)
 
 * **ExpertSession**
 
@@ -187,26 +187,139 @@
 
 * 工作流的定义
 
-#### 任务智能体sub-task -任务的执行者
+#### 任务智能体sub-task agent任务的执行者
 
-* sub-task agent的生命周期：其实很明显在任务图（具体机制在后文有详细描述）
-* sub-task agent的同步问题：
+​	sub-task agent构建过程中比较困难的地方在于agent不一定仅仅通过单一的方法就可以解决expert所分配的问题，所以此处需要设计好sub-task agent工作的生命周期。如果这个系统需要走得更远expert所分配的任务大概率不是一个function就可以解决的问题，所以肯定是需要sub-task-agent能够搞定复合任务的，需要有独立处理任务的能力。
 
-* prompt：
+​	![sub-task-workflow](./image/sub-task-workflow.png)
+
+* prompt1（Tool服务器层决策）：
+
+```json
+你是一个子任务智能体服务于专家智能体的需求,你只需要输出下面输出格式中的内容
+下面是不同服务器所提供的工具类型的数据：
+"{tool_server_info}"
+你的任务是:
+"{sub_task_description}"
+你最终返回给下一个智能体的数据是：
+”{return_content}“
+下面给出你的初步决策，每一步的决策尽可能简单,仅可以使用单一Tool完成
+决策输出格式为(注意其余的信息都不要进行生成)：
+<start_json>
+{{
+ 	"jobs":[
+ 	"0":{{
+ 		"func_describe":"此处描述需要用的工具",
+ 		"server_id": "根据server信息给出工具会属于的server",
+	}},
+	"1":{{
+ 		"func_describe":"此处描述需要用的工具",
+ 		"server_id": "根据server信息给出工具会属于的server",
+	}}, # ....根据自己需要添加 
+    ]
+}}
+<end_json>
+
+```
+
+* prompt2: 
+
+```json
+你是一个子任务智能体服务于专家智能体的需求,你只需要输出下面输出格式中的内容
+    下面是{server_id}服务器所提供的工具详细数据的数据：
+    "{tools_info}"
+    你的任务是:
+    "{job_description}"
+    下面给出你的初步决策，每一步的决策尽可能简单,仅可以使用单一Tool完成
+    决策输出格式为(注意其余的信息都不要进行生成,xxx是你需要填充的内容，你只允许调用一个工具)：
+    <start_json>
+    {{
+     	tool_id:"xxx"
+     	tool_name:"xxx"
+     	tool_parameter:[
+     	    parameter1: "xxx" 
+     	    parameter2: "xxx"
+     	    ... 
+     	]
+    }}
+    <end_json>
+    若Tool 无法满足需求则返回
+    <start_json>
+    {{
+     	error: "tool can not satisfy the requirement"
+    }}
+    <end_json>
+```
+
+
+
+* prompt3: 
+
+```json
+        你是一个子任务智能体服务于专家智能体的需求,你只需要输出下面输出格式中的内容
+        你需要对前面链路的工具调用情况进行汇总
+        你的需要汇总的数据有:
+        "{execute_status}"
+        你需要向下一个智能体传递的内容：
+        "{return_content}"
+        决策输出格式为(注意其余的信息都不要进行生成,xxx是你需要填充的内容)：
+        <start_json>
+        {{
+            "execute_status": "success/error(decided by the execution info)",
+            "return_content": {{
+                "content1": xxx,
+                "content2": xxx,
+                // 可以根据需要继续添加更多内容
+            }}
+        }}
+        <end_json>
+        若需要重新规划任务
+        <start_json>
+        {{
+         	error:"restart"
+        }}
+        <end_json>
+         '''
+```
+
+
+
+* 接口定义如下:
+
+```python
+     """
+    @Function:搜索数据库中的工具信息？还是下放到ComToolPool
+    """
+    def search_corresponded_call(self,tool_describe):
+    """
+    @Function:工具调用
+    """
+    def call_tool(self):
+    """
+    @Function: 获得指定空间中的工具信息
+    """
+    def gain_tool_config(self,tool_path):
+    """
+    @Function: 执行任务
+    """
+    def execute(self,prefix_ids):
+```
+
+
 
 #### ExpertSession（框架最小执行单元）
 
-​	这个ExpertSession初步的设计想法是可以直接将其看成是一个AI system的核心，后续还可以实现多MultExpertSession进一步提高复杂程度。
+​	这个ExpertSession初步的设计想法是可以直接将其看成是一个AI systeWm的核心，后续还可以实现多MultExpertSession进一步提高复杂程度以适配复杂系统，故AI执行单元的数量可以灵活的按照任务来进行分配。
 
-* boot流程：
+* boot流程
+  * 检查组件连接是否正常
+  * 判断是否需要人类的介入/时候需要expert agent初始化
+  * 
+* 
 
-```
+#### CacheManager
 
-```
-
-
-
-#### Agent上下文所有内容的总结
+​		cacheManager的核心功能：对接ComDB的记忆空间管理机制，为智能体提供更为完善的记忆机制 。详细功能：1. comdb_client 功能。2. 定时merge记忆空间（数据库层面的功能）。 3.  Compress的触发，在cacheManager中会为每一个agent维护一个当前对话轮数，当论数达到用户说设定的阈值之后就会触发该智能体记忆空间的压缩。
 
 ---
 
@@ -215,6 +328,8 @@
 ### DAG任务图——智能体调度
 
 #### 粗粒度调度
+
+​	
 
 #### 细粒度动态调度
 
@@ -232,13 +347,103 @@
 
 ​	Tool Pool设计的目的是为了较好的管理不同的server服务器更好的为agent提供api服务。Tool Pool有两大功能：工具信息聚合：整理不同Server的信息并给agent提供汇总，Tool Server分区: 将不同类型的Tool分区之后按照不同的类型进行分布式的路由以防止单点server的“工具爆炸”。
 
+​	针对ToolPool此处提供两套不同的解决方案：
+
+* 稳健版本：由用户注册其编码好的Tool Server
+  * Tool Server向Tool Pool进行注册，注册之后的相关信息会被保存在数据库中，这样可以保证Tool Server每次重启都可以访问其Tool Server。
+  * Tool Pool 对向其注册的Tool Server进行工具数量的校验以及连接的校验。并进行定时的心跳访问测试可达性。
+  * Tool Pool为不同Server维护一个meta表，表中维护了Tool server的工具类型，ip，port，工具大致信息
+  * Tool Pool根据智能体的需求在其维护的数据库中搜索符合的工具信息。（这个搜索要怎么做确实是一个很大的问题），此处还起到了一个网关的功能。这里写一个sprintboot似乎还是非常方便的。
+
+![ComToolPool](./image/ComToolPool.png)
+
+* Beta版：用户传入tool_config.json之后，由智能体对工具代码进行编写并自主部署Tool Sever（此处需要基于基础服务器，也就是会有一个默认的操作K8S的服务器）
+
 #### Tool server设计
 
-* api规范
+* API规范
 
-#### 信息聚合
+  * POST /register
 
+    ```json
+    # from tool server request:
+    {
+      "tool_type": "k8s_manage_tool",
+      "tool_server_description": "Kubernetes 集群管理工具",
+      "server_ip": "192.168.1.100",
+      "server_port": 8080,
+      "health_check_endpoint": "/health"
+    }
+    
+    # from ComToolPool response:
+    {
+      "status": "success",
+      "tool_id": "1"
+    }
+    ```
 
+  * POST/tools 
+
+    ```json
+    # 调用
+    # 查询参数：
+    # tool_type：工具类型（可选）
+    # tool_name：工具名称（可选）
+    # tool_server_id: 工具服务器ID
+    # response：
+    {
+      "tools": [
+        {
+          "tool_id": "1",
+          "tool_type": "k8s_manage_tool",
+          "tool_name": "xxx",
+          "server_ip": "192.168.1.100",
+          "server_port": 8080
+        }
+      ]
+    }
+    ```
+
+  * POST /tools/{tool_id}/execute
+
+    ```json
+    {
+      "parameters": {
+        "xxx": "xxx",
+        "xxx": "xxx"
+      }
+    }
+    
+    {
+      "status": 1,
+      "return ": "xxx"
+    }
+    ```
+
+  * GET /health
+
+    ```
+    {
+      "status": "UP",
+      "last_heartbeat": "2023-10-01T12:00:00Z"
+    }
+    ```
+
+  * GET/tool-server
+
+    没有携带参数，获取tool-server信息
+
+  * DELETE /unregister
+
+    ```
+    {
+      "tool_id": "1"
+    }
+    
+    {
+      "status": 1
+    }
+    ```
 
 #### Tool server分区
 
@@ -258,7 +463,7 @@
 
 ### 架构“云原生化”
 
-![](image/k8s_adapton.png)
+![](D:\桌面\系统设计原型\graph\k8s_adpation.png)
 
 暂时的适配思路如下（此处并未进行任何实验只是简单的设计）：
 
